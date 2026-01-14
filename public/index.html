@@ -1,181 +1,90 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart HTML to PDF Pro (Server)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- CodeMirror (Better Code Editor) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/xml/xml.min.js"></script>
-    <!-- Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <style>
-        /* The "Visual Page Break" Trick */
-        /* A4 height is roughly 1123px at 96dpi. We use a gradient to draw a line every 297mm */
-        .page-preview {
-            width: 210mm;
-            min-height: 297mm;
-            background-color: white;
-            /* Dashed line every 297mm */
-            background-image: linear-gradient(to bottom, transparent 99.8%, #94a3b8 99.8%);
-            background-size: 100% 297mm; 
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-            margin: 0 auto;
-            overflow: hidden; /* Hide overflow */
-        }
-        .CodeMirror { height: 100%; font-size: 14px; }
-        .spinner { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    </style>
-</head>
-<body class="flex flex-col h-screen bg-gray-100 overflow-hidden">
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
 
-    <!-- Navbar -->
-    <nav class="bg-white border-b px-4 py-3 flex justify-between items-center shrink-0 z-20">
-        <div class="flex items-center gap-3">
-            <div class="bg-indigo-600 text-white p-2 rounded-lg"><i class="ph ph-printer text-xl"></i></div>
-            <h1 class="font-bold text-gray-800">Pro PDF Server</h1>
-        </div>
+module.exports = async (req, res) => {
+    let browser = null;
+    try {
+        // 1. SETUP - THE STABLE CONFIGURATION
+        // We explicitly set graphics mode to false to avoid looking for 'libnss3'
+        chromium.setHeadlessMode = true;
+        chromium.setGraphicsMode = false;
 
-        <div class="flex items-center gap-4">
-            <!-- Logo Toggle -->
-            <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-600 select-none">
-                <input type="checkbox" id="logoToggle" class="w-4 h-4 text-indigo-600 rounded">
-                <span>Add Letterhead/Logo</span>
-            </label>
-
-            <!-- Buttons -->
-            <button onclick="clearCode()" class="text-red-500 hover:bg-red-50 p-2 rounded-lg text-sm transition" title="Clear Code">
-                <i class="ph ph-trash text-lg"></i>
-            </button>
-            <button onclick="downloadServerPDF()" id="downloadBtn" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm font-medium">
-                <i class="ph ph-file-pdf"></i> Download PDF
-            </button>
-        </div>
-    </nav>
-
-    <!-- Main Split View -->
-    <main class="flex-1 flex overflow-hidden">
-        <!-- Editor -->
-        <div class="w-1/2 flex flex-col border-r border-gray-300">
-            <div class="bg-gray-800 text-white px-4 py-2 text-xs font-mono flex justify-between">
-                <span>HTML Input</span>
-                <span class="text-gray-400">Lines show approx. page cuts</span>
-            </div>
-            <textarea id="codeEditor"></textarea>
-        </div>
-
-        <!-- Preview -->
-        <div class="w-1/2 bg-gray-600 p-8 overflow-y-auto relative">
-            <div id="toast" class="fixed top-20 right-1/2 translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl z-50 flex items-center gap-3 transition-opacity opacity-0 pointer-events-none">
-                <i class="ph ph-spinner spinner text-indigo-400"></i>
-                <span>Generating on Server...</span>
-            </div>
-
-            <!-- The Paper -->
-            <div id="preview" class="page-preview p-[15mm]">
-                <!-- Content -->
-            </div>
-        </div>
-    </main>
-
-    <script>
-        // 1. Setup CodeMirror (The Fancy Editor)
-        const textArea = document.getElementById('codeEditor');
-        const editor = CodeMirror.fromTextArea(textArea, {
-            mode: "xml",
-            theme: "dracula",
-            lineNumbers: true,
-            autoCloseTags: true,
-            lineWrapping: true
+        browser = await puppeteer.launch({
+            args: [
+                ...chromium.args,
+                "--hide-scrollbars",
+                "--disable-web-security",
+                "--no-sandbox",             // CRITICAL
+                "--disable-setuid-sandbox", // CRITICAL
+                "--disable-gpu"             // CRITICAL
+            ],
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
+            ignoreHTTPSErrors: true,
         });
 
-        // 2. Default Template
-        const defaultHTML = `
-<h1>Invoice #001</h1>
-<p>This is a test of the Server-Side PDF Engine.</p>
-<table style="width:100%; border-collapse: collapse; margin-top: 20px;">
-  <tr style="background:#eee;">
-    <th style="padding:10px; text-align:left; border:1px solid #ccc;">Item</th>
-    <th style="padding:10px; text-align:right; border:1px solid #ccc;">Cost</th>
-  </tr>
-  <tr>
-    <td style="padding:10px; border:1px solid #ccc;">Server PDF Generation</td>
-    <td style="padding:10px; text-align:right; border:1px solid #ccc;">$0.00</td>
-  </tr>
-</table>
+        const page = await browser.newPage();
+
+        // 2. GET DATA
+        const { html, css, showLogo } = req.body || {};
+
+        // 3. LOGO LOGIC
+        const logoSVG = `
+            <div style="font-size: 20px; color: #2563eb; font-weight: bold; width: 100%; margin-left: 20mm; margin-top: 10mm;">
+               YOUR BRAND LOGO
+            </div>`;
+
+        const headerTemplate = showLogo ? logoSVG : '<div></div>';
+
+        // 4. PREPARE HTML
+        const fullContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { margin: 0; font-family: sans-serif; }
+                    ${css}
+                </style>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+            </head>
+            <body>
+                ${html}
+            </body>
+            </html>
         `;
-        
-        editor.setValue(defaultHTML);
 
-        // 3. Sync Editor to Preview
-        const preview = document.getElementById('preview');
-        
-        function updatePreview() {
-            preview.innerHTML = editor.getValue();
+        // 5. GENERATE
+        await page.setContent(fullContent, { waitUntil: 'networkidle0', timeout: 15000 });
+
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: {
+                top: showLogo ? '40mm' : '20mm',
+                bottom: '20mm',
+                left: '0mm',
+                right: '0mm'
+            },
+            displayHeaderFooter: true,
+            headerTemplate: headerTemplate,
+            footerTemplate: `
+                <div style="font-size: 10px; width: 100%; text-align: center; color: #666; padding-bottom: 10px;">
+                    Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+                </div>
+            `
+        });
+
+        // 6. SEND
+        res.setHeader('Content-Type', 'application/pdf');
+        res.status(200).send(pdfBuffer);
+
+    } catch (error) {
+        console.error("PDF Generation Error:", error);
+        res.status(500).send('Server Error: ' + error.message);
+    } finally {
+        if (browser) {
+            await browser.close();
         }
-
-        editor.on('change', updatePreview);
-        updatePreview(); // Init
-
-        // 4. Clear Code Button
-        function clearCode() {
-            if(confirm("Clear all code?")) {
-                editor.setValue("");
-            }
-        }
-
-        // 5. Download Function (Calls Vercel Backend)
-        async function downloadServerPDF() {
-            const btn = document.getElementById('downloadBtn');
-            const toast = document.getElementById('toast');
-            const logoActive = document.getElementById('logoToggle').checked;
-
-            // UI State: Loading
-            btn.disabled = true;
-            btn.classList.add('opacity-50');
-            toast.style.opacity = '1';
-
-            try {
-                // Send data to Vercel
-                const response = await fetch('/api', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        html: editor.getValue(),
-                        // We send a basic CSS reset, you can add more here
-                        css: "table { width: 100%; border-collapse: collapse; } th, td { padding: 8px; border: 1px solid #ddd; }", 
-                        showLogo: logoActive
-                    })
-                });
-
-                if (!response.ok) throw new Error('Server Error');
-
-                // Receive Blob (File)
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                
-                // Trigger Download
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = "pro-document.pdf";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-
-            } catch (err) {
-                alert("Failed to generate PDF. (Vercel Timeout or Error)");
-                console.error(err);
-            } finally {
-                // UI State: Reset
-                btn.disabled = false;
-                btn.classList.remove('opacity-50');
-                toast.style.opacity = '0';
-            }
-        }
-    </script>
-</body>
-      </html>
+    }
+};
