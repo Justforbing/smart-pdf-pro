@@ -4,15 +4,24 @@ const puppeteer = require('puppeteer-core');
 module.exports = async (req, res) => {
     let browser = null;
     try {
-        // 1. SETUP FOR VERCEL (Node 22+)
-        // We do not set specific graphic modes manually anymore, 
-        // we let the library handle the new environment defaults.
-        
+        // 1. SETUP - THE STABLE CONFIGURATION
+        // We explicitly set graphics mode to false to avoid looking for 'libnss3'
+        chromium.setHeadlessMode = true;
+        chromium.setGraphicsMode = false;
+
         browser = await puppeteer.launch({
-            args: chromium.args,
+            args: [
+                ...chromium.args,
+                "--hide-scrollbars",
+                "--disable-web-security",
+                "--no-sandbox",             // CRITICAL
+                "--disable-setuid-sandbox", // CRITICAL
+                "--disable-gpu"             // CRITICAL
+            ],
             defaultViewport: chromium.defaultViewport,
             executablePath: await chromium.executablePath(),
             headless: chromium.headless,
+            ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
@@ -45,8 +54,8 @@ module.exports = async (req, res) => {
             </html>
         `;
 
-        // 5. LOAD & PRINT
-        await page.setContent(fullContent, { waitUntil: 'networkidle0', timeout: 10000 });
+        // 5. GENERATE
+        await page.setContent(fullContent, { waitUntil: 'networkidle0', timeout: 15000 });
 
         const pdfBuffer = await page.pdf({
             format: 'A4',
@@ -66,7 +75,7 @@ module.exports = async (req, res) => {
             `
         });
 
-        // 6. SEND RESPONSE
+        // 6. SEND
         res.setHeader('Content-Type', 'application/pdf');
         res.status(200).send(pdfBuffer);
 
