@@ -141,7 +141,7 @@
 
             try {
                 // Send data to Vercel
-                const response = await fetch('/api', {
+                const response = await fetch('https://smart-pdf-pro.onrender.com/api', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
