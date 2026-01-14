@@ -4,24 +4,15 @@ const puppeteer = require('puppeteer-core');
 module.exports = async (req, res) => {
     let browser = null;
     try {
-        // 1. SETUP - THE STABLE CONFIGURATION
-        // We explicitly set graphics mode to false to avoid looking for 'libnss3'
+        // 1. SETUP - Using Node 20 Compatibility
         chromium.setHeadlessMode = true;
         chromium.setGraphicsMode = false;
 
         browser = await puppeteer.launch({
-            args: [
-                ...chromium.args,
-                "--hide-scrollbars",
-                "--disable-web-security",
-                "--no-sandbox",             // CRITICAL
-                "--disable-setuid-sandbox", // CRITICAL
-                "--disable-gpu"             // CRITICAL
-            ],
+            args: chromium.args,
             defaultViewport: chromium.defaultViewport,
             executablePath: await chromium.executablePath(),
             headless: chromium.headless,
-            ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
