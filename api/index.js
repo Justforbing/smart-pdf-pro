@@ -1,30 +1,26 @@
-// api/index.js
 const chromium = require('@sparticuz/chromium');
 const puppeteer = require('puppeteer-core');
 
 module.exports = async (req, res) => {
     let browser = null;
     try {
-        // 1. OPTIMIZED LAUNCH SETTINGS FOR VERCEL
-        // This setup forces the browser to run in a way that doesn't need 
-        // the missing system files (libnss3).
-        chromium.setHeadlessMode = true;
-        chromium.setGraphicsMode = false;
-
+        // 1. SETUP FOR VERCEL (Node 22+)
+        // We do not set specific graphic modes manually anymore, 
+        // we let the library handle the new environment defaults.
+        
         browser = await puppeteer.launch({
-            args: [...chromium.args, "--hide-scrollbars", "--disable-web-security"],
+            args: chromium.args,
             defaultViewport: chromium.defaultViewport,
             executablePath: await chromium.executablePath(),
             headless: chromium.headless,
-            ignoreHTTPSErrors: true,
         });
 
         const page = await browser.newPage();
 
-        // 2. Get data
+        // 2. GET DATA
         const { html, css, showLogo } = req.body || {};
 
-        // 3. LOGO LOGIC (Placeholder for now)
+        // 3. LOGO LOGIC
         const logoSVG = `
             <div style="font-size: 20px; color: #2563eb; font-weight: bold; width: 100%; margin-left: 20mm; margin-top: 10mm;">
                YOUR BRAND LOGO
@@ -32,7 +28,7 @@ module.exports = async (req, res) => {
 
         const headerTemplate = showLogo ? logoSVG : '<div></div>';
 
-        // 4. Combine HTML + CSS
+        // 4. PREPARE HTML
         const fullContent = `
             <!DOCTYPE html>
             <html>
@@ -49,11 +45,9 @@ module.exports = async (req, res) => {
             </html>
         `;
 
-        // 5. Load content (With Timeout Safety)
-        // We reduce timeout to 6 seconds to fail fast if it hangs
-        await page.setContent(fullContent, { waitUntil: 'networkidle0', timeout: 6000 });
+        // 5. LOAD & PRINT
+        await page.setContent(fullContent, { waitUntil: 'networkidle0', timeout: 10000 });
 
-        // 6. Generate PDF
         const pdfBuffer = await page.pdf({
             format: 'A4',
             printBackground: true,
@@ -72,7 +66,7 @@ module.exports = async (req, res) => {
             `
         });
 
-        // 7. Send back
+        // 6. SEND RESPONSE
         res.setHeader('Content-Type', 'application/pdf');
         res.status(200).send(pdfBuffer);
 
